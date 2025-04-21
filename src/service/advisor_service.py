@@ -3,7 +3,7 @@ from copy import deepcopy
 from typing import Optional
 from datetime import datetime
 from src.service.assistant_data_process import AssistantDataProcess
-from src.service.insurance_advisor_v1.process_graph import AdvisorGraph
+from src.service.insurance_advisor.process_graph import AdvisorGraph
 
 # 配置日志
 logging.basicConfig(

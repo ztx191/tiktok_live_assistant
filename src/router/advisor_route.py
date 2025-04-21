@@ -1,6 +1,6 @@
 from fastapi import APIRouter
 import uuid
-from src.service.advisor_service_v1 import AdvisorService
+from src.service.advisor_service import AdvisorService
 from src.model.advisor import AdvisorConfig, RequestModel, InitModel, ReviseConfig, InquireConfig
 from src.service.assistant_data_process import AssistantDataProcess
 
