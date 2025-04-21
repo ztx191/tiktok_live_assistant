@@ -87,11 +87,3 @@ class AssistantGraph:
         logger.info(f"用户{query}的回答为: \n{res}")
         return res
 
-
-if __name__ == '__main__':
-    from src.service.broadcast_assistant.test import config1
-    workflow = AssistantGraph(config1)
-    while True:
-        query = input("请输入问题：")
-        res = asyncio.run(workflow.chat(query))
-        print(res)
