@@ -1,0 +1,314 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <title>问题合并系统</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            line-height: 1.6;
+            margin: 0;
+            padding: 20px;
+        }
+        .container {
+            display: flex;
+            justify-content: space-between;
+            width: 100%;
+            margin-top: 20px;
+        }
+        .column {
+            width: 45%;
+            border: 1px solid #ccc;
+            border-radius: 5px;
+            padding: 15px;
+            box-shadow: 0 2px 5px rgba(0,0,0,0.1);
+        }
+        .items-container {
+            height: 450px;
+            overflow-y: auto;
+        }
+        .item {
+            margin: 8px 0;
+            padding: 12px;
+            background-color: #f8f9fa;
+            border-radius: 4px;
+            cursor: pointer;
+            transition: all 0.2s;
+            border-left: 3px solid transparent;
+        }
+        .item:hover {
+            background-color: #e9ecef;
+        }
+        .item.selected {
+            background-color: #d4edda;
+            border-left: 3px solid #28a745;
+        }
+        .item.similar {
+            background-color: #fff3cd;
+            border-left: 3px solid #ffc107;
+        }
+        .item.similar.selected {
+            background-color: #d1ecf1;
+            border-left: 3px solid #17a2b8;
+        }
+        .controls {
+            width: 10%;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+        }
+        button {
+            margin: 10px;
+            padding: 10px 15px;
+            background-color: #007bff;
+            color: white;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            transition: background-color 0.2s;
+        }
+        button:hover {
+            background-color: #0069d9;
+        }
+        button:disabled {
+            background-color: #6c757d;
+            cursor: not-allowed;
+        }
+        h1, h2 {
+            color: #343a40;
+        }
+        h2 {
+            margin-top: 0;
+            padding-bottom: 10px;
+            border-bottom: 1px solid #eee;
+        }
+        .similar-section {
+            margin-bottom: 15px;
+            padding: 10px;
+            background-color: #fff3cd;
+            border-radius: 4px;
+            border-left: 3px solid #ffc107;
+            display: none;
+        }
+        .similar-section h3 {
+            margin-top: 0;
+            color: #856404;
+        }
+        .similar-section-items {
+            max-height: 200px;
+            overflow-y: auto;
+        }
+        .separator {
+            height: 2px;
+            background-color: #dee2e6;
+            margin: 15px 0;
+        }
+        .instruction {
+            font-style: italic;
+            color: #6c757d;
+            margin-bottom: 10px;
+        }
+    </style>
+</head>
+<body>
+    <h1>问题合并系统</h1>
+
+    <div class="container">
+        <div class="column" id="column1">
+            <h2>新增问题列表</h2>
+            <div class="items-container" id="newProblems"></div>
+        </div>
+
+        <div class="controls">
+            <button id="mergeBtn" disabled>合并 &rarr;</button>
+        </div>
+
+        <div class="column" id="column2">
+            <h2>已有问题列表</h2>
+
+            <!-- 相似问题区域 -->
+            <div class="similar-section" id="similarSection">
+                <h3>相似问题</h3>
+                <p class="instruction">请选择一个要替换的问题，或直接点击"合并"按钮添加为新问题</p>
+                <div class="similar-section-items" id="similarItems"></div>
+            </div>
+
+            <div class="separator" id="separator" style="display: none;"></div>
+
+            <!-- 所有已有问题区域 -->
+            <div class="items-container" id="existingProblems"></div>
+        </div>
+    </div>
+
+    <script>
+        let selectedNewProblem = null;
+        let selectedExistingProblem = null;
+        let similarProblems = [];
+        let allExistingProblems = [];
+
+        // 初始化加载数据
+        window.onload = function() {
+            fetchProblems();
+        };
+
+        // 从服务器获取问题列表
+        function fetchProblems() {
+            fetch('/api/problems')
+                .then(response => response.json())
+                .then(data => {
+                    allExistingProblems = data.existing_problems; // 保存所有已有问题
+                    renderProblems(data.new_problems, 'newProblems');
+                    renderProblems(data.existing_problems, 'existingProblems');
+                })
+                .catch(error => console.error('Error fetching problems:', error));
+        }
+
+        // 渲染问题列表
+        function renderProblems(problems, containerId) {
+            const container = document.getElementById(containerId);
+            container.innerHTML = '';
+
+            problems.forEach(problem => {
+                const item = document.createElement('div');
+                item.className = 'item';
+                item.dataset.id = problem.id;
+                item.textContent = `${problem.title} (ID: ${problem.id})`;
+
+                if (containerId === 'newProblems') {
+                    // 为新问题列表添加点击事件
+                    item.addEventListener('click', function() {
+                        handleNewProblemClick(problem, this);
+                    });
+                } else if (containerId === 'existingProblems' || containerId === 'similarItems') {
+                    // 为已有问题列表添加点击事件
+                    item.addEventListener('click', function() {
+                        handleExistingProblemClick(problem, this);
+                    });
+                }
+
+                container.appendChild(item);
+            });
+        }
+
+        // 处理新问题点击
+        function handleNewProblemClick(problem, element) {
+            // 清除之前的选择
+            clearSelection('newProblems');
+
+            // 清除之前的相似问题显示
+            hideSimilarSection();
+
+            // 设置当前选择
+            element.classList.add('selected');
+            selectedNewProblem = problem;
+            selectedExistingProblem = null;
+
+            // 启用合并按钮
+            document.getElementById('mergeBtn').disabled = false;
+
+            // 检查是否有相似问题
+            checkForSimilarProblems(problem.id);
+        }
+
+        // 处理已有问题点击
+        function handleExistingProblemClick(problem, element) {
+            // 清除之前的选择（包括相似问题区域和已有问题区域）
+            document.querySelectorAll('#existingProblems .item, #similarItems .item').forEach(item => {
+                item.classList.remove('selected');
+            });
+
+            // 标记为选中
+            element.classList.add('selected');
+            selectedExistingProblem = problem;
+        }
+
+        // 清除选择
+        function clearSelection(containerId) {
+            document.querySelectorAll(`#${containerId} .item`).forEach(item => {
+                item.classList.remove('selected');
+            });
+        }
+
+        // 隐藏相似问题区域
+        function hideSimilarSection() {
+            document.getElementById('similarSection').style.display = 'none';
+            document.getElementById('separator').style.display = 'none';
+            document.getElementById('existingProblems').style.display = 'block';
+
+            // 显示所有已有问题
+            renderProblems(allExistingProblems, 'existingProblems');
+
+            // 清空相似列表
+            similarProblems = [];
+        }
+
+        // 显示相似问题区域
+        function showSimilarSection(problems) {
+            const similarSection = document.getElementById('similarSection');
+            const separator = document.getElementById('separator');
+
+            // 渲染相似问题
+            renderProblems(problems, 'similarItems');
+
+            // 显示相似问题区域和分隔线
+            similarSection.style.display = 'block';
+            separator.style.display = 'block';
+        }
+
+        // 检查相似问题
+        function checkForSimilarProblems(problemId) {
+            fetch(`/api/similar?id=${problemId}`)
+                .then(response => response.json())
+                .then(data => {
+                    if (data.success && data.similar_problems.length > 0) {
+                        similarProblems = data.similar_problems;
+
+                        // 显示相似问题区域
+                        showSimilarSection(similarProblems);
+                    }
+                })
+                .catch(error => console.error('Error checking similar problems:', error));
+        }
+
+        // 设置合并按钮事件
+        document.getElementById('mergeBtn').addEventListener('click', function() {
+            if (!selectedNewProblem) {
+                alert('请先选择要合并的新问题');
+                return;
+            }
+
+            const data = {
+                newProblemId: selectedNewProblem.id,
+                replaceProblemId: selectedExistingProblem ? selectedExistingProblem.id : null
+            };
+
+            fetch('/api/merge', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify(data)
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    alert('合并成功: ' + data.message);
+
+                    // 重置状态
+                    selectedNewProblem = null;
+                    selectedExistingProblem = null;
+                    hideSimilarSection();
+                    document.getElementById('mergeBtn').disabled = true;
+
+                    // 重新加载数据
+                    fetchProblems();
+                } else {
+                    alert('合并失败: ' + data.message);
+                }
+            })
+            .catch(error => console.error('Error merging problems:', error));
+        });
+    </script>
+</body>
+</html>
