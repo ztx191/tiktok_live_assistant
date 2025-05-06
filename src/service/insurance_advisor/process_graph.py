@@ -4,8 +4,8 @@ from langgraph.checkpoint.memory import MemorySaver
 import asyncio
 import logging
 
-from src.service.insurance_advisor_v1.process_nodes import AdvisorProcess
-from src.service.insurance_advisor_v1.models import AgentState
+from src.service.insurance_advisor.process_nodes import AdvisorProcess
+from src.service.insurance_advisor.models import AgentState
 
 logger = logging.getLogger(__name__)
 

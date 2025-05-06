@@ -4,7 +4,7 @@ from typing import Optional
 
 from langchain_core.messages import HumanMessage
 
-from src.service.insurance_advisor_v1.advisor_prompt import get_template, ASSISTANT_PERSONALITY, ANSWER_BY_KNOWLEDGE, \
+from src.service.insurance_advisor.advisor_prompt import get_template, ASSISTANT_PERSONALITY, ANSWER_BY_KNOWLEDGE, \
     MAIN_CLASSIFICATION_PROMPT, COLLECT_PROMPT, ANSWER_WITH_FORMER_QUESTION, COLLECT_ANSWER_PROMPT
 from src.service.utils import message_to_list_dict
 from src.service.knowledge_base_service import KnowledgeBaseService
