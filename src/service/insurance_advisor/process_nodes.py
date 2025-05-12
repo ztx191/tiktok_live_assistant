@@ -2,7 +2,7 @@ import logging
 from copy import deepcopy
 from typing import Optional
 
-from langchain_core.messages import HumanMessage
+from langchain_core.messages import HumanMessage, SystemMessage
 
 from src.service.insurance_advisor.advisor_prompt import get_template, ASSISTANT_PERSONALITY, ANSWER_BY_KNOWLEDGE, \
     MAIN_CLASSIFICATION_PROMPT, COLLECT_PROMPT, ANSWER_WITH_FORMER_QUESTION, COLLECT_ANSWER_PROMPT
@@ -19,6 +19,7 @@ logger = logging.getLogger(__name__)
 class AdvisorProcess:
     kb_service = KnowledgeBaseService()
     llm = LLMService().get_llm()
+    # decision_llm = LLMService("claude-3-7-sonnet-20250219").get_llm()
     conclusion = r"如果可以请留下你的电话号码，有意向请访问链接：https://www.baidu.com"
 
     @classmethod
@@ -74,7 +75,7 @@ class AdvisorProcess:
                                                                      broadcast_topic=broadcast_topic,
                                                                      category_description=category_description,
                                                                      category='、'.join(category),
-                                                                     question=question,
+                                                                     # question=question,
                                                                      junior=junior,
                                                                      last_intent=last_intent)
         else:
@@ -82,10 +83,12 @@ class AdvisorProcess:
                                                                      broadcast_topic=broadcast_topic,
                                                                      category_description=category_description,
                                                                      category='、'.join(category),
-                                                                     question=question,
+                                                                     # question=question,
                                                                      last_intent=last_intent)
-        logger.info(f"intent_classify的提示语：{prompt}")
-        msgs = [HumanMessage(content=prompt)]
+        logger.info(f"意图分类的提示语：{prompt}")
+        system = [SystemMessage(content=prompt)]
+        msgs = [HumanMessage(content=query[-1].content)]
+        copy_query.insert(0, *system)
         copy_query[-1:] = msgs
         _res = await cls.llm.ainvoke(copy_query, stream=False)
         classify = get_json_data(_res)
@@ -266,10 +269,12 @@ class AdvisorProcess:
 
         answer_prompt = get_template(ANSWER_WITH_FORMER_QUESTION).render(context=state["former_question"],
                                                                   query=query[-1].content)
-        input_prompt = system + "\n\n" + answer_prompt + "\n\n" + collect_prompt
+        input_prompt = answer_prompt + "\n\n" + collect_prompt
 
         logger.info(f"用户输入：{query[-1].content}的提示词为：\n{input_prompt}")
+        system = [SystemMessage(content=system)]
         msgs = [HumanMessage(content=input_prompt)]
+        copy_query.insert(0, *system)
         copy_query[-1:] = msgs
         _res = await cls.llm.ainvoke(copy_query, stream=False)
         return {"messages": [_res]}
@@ -319,9 +324,11 @@ class AdvisorProcess:
                                           kb_name=config["kb_name"],
                                           bad_answer=config["bad_answer"])
 
-        prompt = system_prompt + "\n\n" + answer_prompt + "\n\n" + collect_prompt
+        prompt = answer_prompt + "\n\n" + collect_prompt
         logger.info(f"用户输入：{query[-1].content}的提示词为：\n{prompt}")
+        system = [SystemMessage(content=system_prompt)]
         msgs = [HumanMessage(content=prompt)]
+        copy_query.insert(0, *system)
         copy_query[-1:] = msgs
         _res = await cls.llm.ainvoke(copy_query, stream=False)
         return {"messages": [_res]}
@@ -480,9 +487,11 @@ class AdvisorProcess:
                                                   kb_name=details["kb_name"],
                                                   customer_intent=details["description"]
                                               )
-            prompt = system_prompt + "\n\n" + answer_prompt + "\n\n" + collect_prompt
+            prompt = answer_prompt + "\n\n" + collect_prompt
         logger.info(f"用户输入：{query[-1].content}的提示词为：\n{prompt}")
+        system = [SystemMessage(content=system_prompt)]
         msgs = [HumanMessage(content=prompt)]
+        copy_query.insert(0, *system)
         copy_query[-1:] = msgs
         _res = await cls.llm.ainvoke(copy_query, stream=False)
 
@@ -571,9 +580,11 @@ class AdvisorProcess:
                                    bad_answer=config["bad_answer"],
                                    customer_intent=details["description"])
         # prompt = system_prompt + "\n" + collect_prompt + "\n" + answer
-        prompt = system_prompt + "\n\n" + answer_prompt + "\n\n" + collect_prompt
+        prompt = answer_prompt + "\n\n" + collect_prompt
         logger.info(f"用户输入：{query[-1].content}的提示词为：\n{prompt}")
+        system = [SystemMessage(content=system_prompt)]
         msgs = [HumanMessage(content=prompt)]
+        copy_query.insert(0, *system)
         copy_query[-1:] = msgs
         _res = await cls.llm.ainvoke(copy_query, stream=False)
         # 保存助手回复到相应的意图历史
