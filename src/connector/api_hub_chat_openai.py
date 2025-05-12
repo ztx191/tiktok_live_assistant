@@ -14,9 +14,9 @@ class ChatOpenAISettings(KernelBaseSettings):
     default_ai_model_id: str
     default_ai_issuer: str
 
-    temperature: float = 0.0
+    temperature: float = 0.1
     streaming: bool = False
-    max_tokens: int = 1500
+    max_tokens: int = 5000
 
 class ChatApiHub(ChatOpenAI):
     def _create_chat_result(
