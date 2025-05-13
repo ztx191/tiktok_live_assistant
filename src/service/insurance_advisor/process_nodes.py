@@ -24,42 +24,37 @@ class AdvisorProcess:
 
     @classmethod
     def answer_prompt(cls, query: str, kb_name: Optional[str]= None, bad_answer: Optional[str] = None,
-                      response_rule: Optional[str] = None, customer_intent: Optional[str] = None):
-        if not customer_intent:
-            customer_intent = ""
+                      response_rule: Optional[str] = None):
+
         if kb_name:
             documents, _ = cls.kb_service.search_document(query=query, database_name=kb_name)
             logger.info(f"{query}从关联知识库中检索内容：\n{documents}")
             if not response_rule:
                 input_prompt = get_template(ANSWER_BY_KNOWLEDGE).render(kb_content=documents,
                                                                         bad_answer=bad_answer,
-                                                                        question=query,
-                                                                        # customer_intent=customer_intent
+                                                                        question=query
                                                                         )
             else:
                 input_prompt = get_template(ANSWER_BY_KNOWLEDGE).render(kb_content=documents,
                                                                         bad_answer=bad_answer,
                                                                         question=query,
-                                                                        response_rule=response_rule,
-                                                                        # customer_intent=customer_intent
+                                                                        response_rule=response_rule
                                                                         )
         else:
             if not response_rule:
                 input_prompt = get_template(ANSWER_BY_KNOWLEDGE).render(bad_answer=bad_answer,
-                                                                        question=query,
-                                                                        # customer_intent=customer_intent
+                                                                        question=query
                                                                         )
             else:
                 input_prompt = get_template(ANSWER_BY_KNOWLEDGE).render(question=query,
-                                                                        response_rule=response_rule,
-                                                                        # customer_intent=customer_intent
+                                                                        bad_answer=bad_answer,
+                                                                        response_rule=response_rule
                                                                         )
         return input_prompt
 
     @classmethod
     async def classify_user_question(cls, query, industry: str, broadcast_topic: str, details: dict,
-                                     category: str, junior: Optional[str] = None, last_intent: Optional[str] = None):
-        question = query[-1].content
+                                     category: str, junior: Optional[str] = None):
         copy_query = deepcopy(query)
         details = deepcopy(details)
         details.pop("description", None)
@@ -74,31 +69,28 @@ class AdvisorProcess:
             prompt = get_template(MAIN_CLASSIFICATION_PROMPT).render(industry=industry,
                                                                      broadcast_topic=broadcast_topic,
                                                                      category_description=category_description,
-                                                                     category='、'.join(category),
-                                                                     # question=question,
-                                                                     junior=junior,
-                                                                     last_intent=last_intent)
+                                                                     category='、'.join(category)
+                                                                     )
         else:
             prompt = get_template(MAIN_CLASSIFICATION_PROMPT).render(industry=industry,
                                                                      broadcast_topic=broadcast_topic,
                                                                      category_description=category_description,
-                                                                     category='、'.join(category),
-                                                                     # question=question,
-                                                                     last_intent=last_intent)
+                                                                     category='、'.join(category)
+                                                                     )
         logger.info(f"意图分类的提示语：{prompt}")
         system = [SystemMessage(content=prompt)]
-        msgs = [HumanMessage(content=query[-1].content)]
+        user_prompt = f"客户输入：{query[-1].content}，分析客户的意图"
+        msgs = [HumanMessage(content=user_prompt)]
         copy_query.insert(0, *system)
         copy_query[-1:] = msgs
         _res = await cls.llm.ainvoke(copy_query, stream=False)
+        print(_res.content)
         classify = get_json_data(_res)
         # logger.info(f"返回结果：{classify}")
         return classify
 
     @classmethod
     async def collect_user_info(cls, state):
-        # query = state["messages"]
-        # history = message_to_list_dict(query)
         recorder = state["flow_guide"]
         now_intent = recorder["now_intent"].split("||")[-1]
         if recorder["classify_continue"]:
@@ -124,10 +116,13 @@ class AdvisorProcess:
         #     q_list = [qa["q"] for qa in list_qa if qa["a"] != ""]
         #     collect_prompt = get_template(COLLECT_PROMPT).render(questionlist=question, history=history, qa_list=q_list)
         # else:
-        collect_prompt = get_template(COLLECT_PROMPT).render(questionlist=question, history=_history)
+        collect_prompt = get_template(COLLECT_PROMPT).render(questionlist=question)
         logger.info(f"collect_user_info的提示语：{collect_prompt}")
-        msgs = [HumanMessage(content=collect_prompt)]
+        system = [SystemMessage(content=collect_prompt)]
+        msgs = [HumanMessage(content=f"<历史记录>\n{_history}，按照输出格式输入")]
+        msgs.insert(0, *system)
         _res = await cls.llm.ainvoke(msgs, stream=False)
+        print(_res.content)
         _res = get_json_data(_res)
         recorder["collect_pace"][f"{now_intent}"]["qa_list"] = _res["问答"]
         qa_list = _res["问答"]
@@ -322,7 +317,8 @@ class AdvisorProcess:
 
         answer_prompt = cls.answer_prompt(query=query[-1].content,
                                           kb_name=config["kb_name"],
-                                          bad_answer=config["bad_answer"])
+                                          bad_answer=config["bad_answer"]
+                                          )
 
         prompt = answer_prompt + "\n\n" + collect_prompt
         logger.info(f"用户输入：{query[-1].content}的提示词为：\n{prompt}")
@@ -354,8 +350,7 @@ class AdvisorProcess:
                                                     industry=config["industry"],
                                                     broadcast_topic=config["broadcast_topic"],
                                                     details=details,
-                                                    category=category,
-                                                    # last_intent=recorder["hit_intent"][-1]
+                                                    category=category
                                                     )
         else:
             _res = await cls.classify_user_question(query=query,
@@ -442,7 +437,7 @@ class AdvisorProcess:
                 query=query[-1].content,
                 bad_answer=config["bad_answer"]
             )
-            prompt = system_prompt + "\n\n" + answer_prompt + "\n\n" + collect_prompt
+            prompt = answer_prompt + "\n\n" + collect_prompt
         else:
             now_intent = recorder["now_intent"].split("||")[-1]
             details = config["details"]["details"][f"{now_intent}"]
@@ -476,16 +471,14 @@ class AdvisorProcess:
                 ).replace("None", "")
                     # f"# 回答客户问题后你需要通过问答收集客户信息，\n## 待问问题尽量原文转述。\n待问内容：{collect}"
                 answer_prompt = cls.answer_prompt(query=query[-1].content,
-                                                  bad_answer=config["bad_answer"],
-                                                  customer_intent=details["description"]
+                                                  bad_answer=config["bad_answer"]
                                                   )
 
             else:
                 collect_prompt = ""
                 answer_prompt = cls.answer_prompt(query=query[-1].content,
                                                   bad_answer=config["bad_answer"],
-                                                  kb_name=details["kb_name"],
-                                                  customer_intent=details["description"]
+                                                  kb_name=details["kb_name"]
                                               )
             prompt = answer_prompt + "\n\n" + collect_prompt
         logger.info(f"用户输入：{query[-1].content}的提示词为：\n{prompt}")
@@ -577,8 +570,7 @@ class AdvisorProcess:
         answer_prompt = cls.answer_prompt(query=query[-1].content,
                                    kb_name=details.get("kb_name"),
                                    response_rule=details.get("response_rule"),
-                                   bad_answer=config["bad_answer"],
-                                   customer_intent=details["description"])
+                                   bad_answer=config["bad_answer"])
         # prompt = system_prompt + "\n" + collect_prompt + "\n" + answer
         prompt = answer_prompt + "\n\n" + collect_prompt
         logger.info(f"用户输入：{query[-1].content}的提示词为：\n{prompt}")
@@ -668,8 +660,7 @@ class AdvisorProcess:
             collect_prompt = ""
 
         answer_prompt = cls.answer_prompt(query=query[-1].content,
-                                          bad_answer=config["bad_answer"],
-                                          customer_intent=details["description"])
+                                          bad_answer=config["bad_answer"])
         prompt = system_prompt + "\n\n" + answer_prompt + "\n\n" + collect_prompt
         logger.info(f"用户输入：{query[-1].content}的提示词为：\n{prompt}")
         msgs = [HumanMessage(content=prompt)]
@@ -728,12 +719,10 @@ class AdvisorProcess:
             answer_prompt = cls.answer_prompt(query=query[-1].content,
                                               kb_name=details[second_intent].get("kb_name"),
                                               response_rule=details[second_intent].get("response_rule"),
-                                              bad_answer=config["bad_answer"],
-                                              customer_intent=customer_intent)
+                                              bad_answer=config["bad_answer"])
         else:
             answer_prompt = cls.answer_prompt(query=query[-1].content,
                                               bad_answer=config["bad_answer"],
-                                              customer_intent=customer_intent,
                                               response_rule=details[second_intent].get("response_rule"))
         prompt = system_prompt + "\n\n" + answer_prompt + "\n\n" + collect_prompt
         logger.info(f"用户输入：{query[-1].content}的提示词为：\n{prompt}")

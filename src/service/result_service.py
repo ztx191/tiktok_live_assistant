@@ -98,6 +98,7 @@ def get_json_data(text):
 
     except Exception as e:
         logger.error(f"提取json数据失败：{e}")
+        logger.error(f"提取json数据失败：{result}")
         return {}
     return result
 
