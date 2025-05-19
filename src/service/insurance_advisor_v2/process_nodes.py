@@ -63,7 +63,6 @@ class AdvisorProcess:
             result.append(f'- "{key}"：{description}')
         category_description = "\n".join(result)
         if junior:
-            # TODO：添加次级分类，提示词
             prompt = get_template(SECONDARY_MAIN_CLASSIFICATION_PROMPT).render(industry=industry,
                                                                                broadcast_topic=broadcast_topic,
                                                                                category_description=category_description,
@@ -76,7 +75,7 @@ class AdvisorProcess:
                                                                      category_description=category_description,
                                                                      category='、'.join(category)
                                                                      )
-        logger.info(f"意图分类的提示语：{prompt}")
+        # logger.info(f"意图分类的提示语：{prompt}")
         system = [SystemMessage(content=prompt)]
         user_prompt = f"客户输入：{query[-1].content}，分析客户的意图"
         msgs = [HumanMessage(content=user_prompt)]
@@ -107,7 +106,7 @@ class AdvisorProcess:
             question = config["collect_cust_info"]
             q_len = len(question)
         collect_prompt = get_template(COLLECT_PROMPT).render(questionlist=question)
-        logger.info(f"collect_user_info的提示语：{collect_prompt}")
+        # logger.info(f"collect_user_info的提示语：{collect_prompt}")
         system = [SystemMessage(content=collect_prompt)]
         msgs = [HumanMessage(content=f"<历史记录>\n{_history}，按照输出格式输入")]
         msgs.insert(0, *system)
@@ -152,6 +151,7 @@ class AdvisorProcess:
                 else:
                     collect_details = details[collect_intent]
                 recorder, collect_prompt = await cls.collect_info(collect_intent, state)
+                next_intent = recorder["hit_intent"][-1]
                 answer_prompt = cls.answer_prompt(query=query[-1].content,
                                                   bad_answer=config["bad_answer"],
                                                   kb_name=collect_details.get("kb_name"),
@@ -167,6 +167,7 @@ class AdvisorProcess:
                 previous_collect_intent = recorder["hit_intent"][-2]
                 werther_answer = previous_collect_intent
                 recorder, collect_prompt = await cls.collect_info(collect_intent, state)
+                next_intent = recorder["hit_intent"][-1]
                 if recorder["collect_pace"][collect_intent]["flag"] == 0:
                     flag, _, _ = await cls.collect_user_info(state, previous_collect_intent)
                     recorder["collect_pace"][f"{previous_collect_intent}"]["flag"] = flag
@@ -182,12 +183,13 @@ class AdvisorProcess:
             else:
                 collect_details = details[collect_intent]
             recorder, collect_prompt = await cls.collect_info(collect_intent, state)
+            next_intent = recorder["hit_intent"][-1]
             answer_prompt = cls.answer_prompt(query=query[-1].content,
                                               bad_answer=config["bad_answer"],
                                               kb_name=collect_details.get("kb_name"),
                                               response_rule=collect_details.get("response_rule")
                                               )
-        return collect_prompt, answer_prompt, collect_intent, werther_answer
+        return collect_prompt, answer_prompt, collect_intent, next_intent, werther_answer
 
     @classmethod
     def begin_node(cls, state):
@@ -294,7 +296,7 @@ class AdvisorProcess:
                                                                          query=query[-1].content)
         input_prompt = answer_prompt
 
-        logger.info(f"用户输入：{query[-1].content}的提示词为：\n{input_prompt}")
+        # logger.info(f"用户输入：{query[-1].content}的提示词为：\n{input_prompt}")
         system = [SystemMessage(content=system)]
         msgs = [HumanMessage(content=input_prompt)]
         copy_query.insert(0, *system)
@@ -351,7 +353,7 @@ class AdvisorProcess:
                                           )
 
         prompt = answer_prompt + "\n\n" + collect_prompt
-        logger.info(f"用户输入：{query[-1].content}的提示词为：\n{prompt}")
+        # logger.info(f"用户输入：{query[-1].content}的提示词为：\n{prompt}")
         system = [SystemMessage(content=system_prompt)]
         msgs = [HumanMessage(content=prompt)]
         copy_query.insert(0, *system)
@@ -453,7 +455,7 @@ class AdvisorProcess:
             bad_answer=config["bad_answer"]
         )
         prompt = answer_prompt
-        logger.info(f"用户输入：{query[-1].content}的提示词为：\n{prompt}")
+        # logger.info(f"用户输入：{query[-1].content}的提示词为：\n{prompt}")
         system = [SystemMessage(content=system_prompt)]
         msgs = [HumanMessage(content=prompt)]
         copy_query.insert(0, *system)
@@ -498,12 +500,14 @@ class AdvisorProcess:
             if unfinished_collect:
                 collect, previous, state = await cls.additional_questions(state, unfinished_collect)
                 collect_dict = {"collect": collect, "previous": previous, "asking": True}
+                _previous = previous
             else:
                 collect_dict = dict()
-
+                _previous = None
             if again_flag == 1:
                 collect_dict.update({"conclusion": cls.conclusion})
-
+                if _previous:
+                    recorder["hit_intent"].append(_previous)
             if again_flag == -1 and not collect_dict:
                 collect_dict = dict()
 
@@ -540,8 +544,9 @@ class AdvisorProcess:
                                           kb_name=details.get("kb_name"),
                                           response_rule=details.get("response_rule")
                                           )
+        next_intent = recorder["hit_intent"][-1]
         prompt = answer_prompt + "\n\n" + collect_prompt
-        logger.info(f"用户输入：{query[-1].content}的提示词为：\n{prompt}")
+        # logger.info(f"用户输入：{query[-1].content}的提示词为：\n{prompt}")
         system = [SystemMessage(content=system_prompt)]
         msgs = [HumanMessage(content=prompt)]
         copy_query.insert(0, *system)
@@ -552,6 +557,8 @@ class AdvisorProcess:
             "content": _res.content
         }
         recorder["collect_pace"][collect_intent]["history"].append(assistant_message)
+        if next_intent != collect_intent:
+            recorder["collect_pace"][next_intent]["history"].append(assistant_message)
         return {"messages": [_res], "flow_guide": recorder}
 
     @classmethod
@@ -585,9 +592,9 @@ class AdvisorProcess:
                                                                    broadcast_topic=recorder["broadcast_topic"],
                                                                    elements="、".join(recorder["classify"])
                                                                    )
-        collect_prompt, answer_prompt, collect_intent, werther_answer = await cls.generate_collect_and_answer_prompt(recorder, config, query, state)
+        collect_prompt, answer_prompt, collect_intent, next_intent, werther_answer = await cls.generate_collect_and_answer_prompt(recorder, config, query, state)
         prompt = answer_prompt + "\n\n" + collect_prompt
-        logger.info(f"用户输入：{query[-1].content}的提示词为：\n{prompt}")
+        # logger.info(f"用户输入：{query[-1].content}的提示词为：\n{prompt}")
         system = [SystemMessage(content=system_prompt)]
         msgs = [HumanMessage(content=prompt)]
         copy_query.insert(0, *system)
@@ -598,7 +605,9 @@ class AdvisorProcess:
             "content": _res.content
         }
         recorder["collect_pace"][collect_intent]["history"].append(assistant_message)
-        if werther_answer:
+        if next_intent != collect_intent:
+            recorder["collect_pace"][next_intent]["history"].append(assistant_message)
+        if werther_answer and werther_answer != next_intent:
             recorder["collect_pace"][werther_answer]["history"].append(assistant_message)
         return {"messages": [_res], "flow_guide": recorder}
 
@@ -639,7 +648,7 @@ class AdvisorProcess:
                                                                    broadcast_topic=recorder["broadcast_topic"],
                                                                    elements="、".join(recorder["classify"])
                                                                    )
-        collect_prompt, _, collect_intent, werther_answer = await cls.generate_collect_and_answer_prompt(
+        collect_prompt, _, collect_intent, next_intent, werther_answer = await cls.generate_collect_and_answer_prompt(
             recorder, config,
             query, state, recorder["scend_intent"])
         answer_prompt = cls.answer_prompt(
@@ -647,19 +656,21 @@ class AdvisorProcess:
             bad_answer=config["bad_answer"]
         )
         prompt = answer_prompt + "\n\n" + collect_prompt
-        logger.info(f"用户输入：{query[-1].content}的提示词为：\n{prompt}")
+        # logger.info(f"用户输入：{query[-1].content}的提示词为：\n{prompt}")
         system = [SystemMessage(content=system_prompt)]
         msgs = [HumanMessage(content=prompt)]
         copy_query.insert(0, *system)
         copy_query[-1:] = msgs
-        _res = await cls.llm.ainvoke(copy_query, stream=False)
         _res = await cls.llm.ainvoke(copy_query, stream=False)
         assistant_message = {
             "role": "assistant",
             "content": _res.content
         }
         recorder["collect_pace"][collect_intent]["history"].append(assistant_message)
-        if werther_answer:
+
+        if next_intent != collect_intent:
+            recorder["collect_pace"][next_intent]["history"].append(assistant_message)
+        if werther_answer and werther_answer != next_intent:
             recorder["collect_pace"][werther_answer]["history"].append(assistant_message)
         return {"messages": [_res], "flow_guide": recorder}
 
@@ -674,24 +685,26 @@ class AdvisorProcess:
                                                                    elements="、".join(recorder["classify"])
                                                                    )
 
-        collect_prompt, answer_prompt, collect_intent, werther_answer = await cls.generate_collect_and_answer_prompt(
+        collect_prompt, answer_prompt, collect_intent, next_intent, werther_answer = await cls.generate_collect_and_answer_prompt(
             recorder, config,
             query, state, recorder["scend_intent"])
 
         prompt = answer_prompt + "\n\n" + collect_prompt
-        logger.info(f"用户输入：{query[-1].content}的提示词为：\n{prompt}")
+        # logger.info(f"用户输入：{query[-1].content}的提示词为：\n{prompt}")
         system = [SystemMessage(content=system_prompt)]
         msgs = [HumanMessage(content=prompt)]
         copy_query.insert(0, *system)
         copy_query[-1:] = msgs
-        _res = await cls.llm.ainvoke(copy_query, stream=False)
         _res = await cls.llm.ainvoke(copy_query, stream=False)
         assistant_message = {
             "role": "assistant",
             "content": _res.content
         }
         recorder["collect_pace"][collect_intent]["history"].append(assistant_message)
-        if werther_answer:
+
+        if next_intent != collect_intent:
+            recorder["collect_pace"][next_intent]["history"].append(assistant_message)
+        if werther_answer and werther_answer != next_intent:
             recorder["collect_pace"][werther_answer]["history"].append(assistant_message)
         return {"messages": [_res], "flow_guide": recorder}
 
