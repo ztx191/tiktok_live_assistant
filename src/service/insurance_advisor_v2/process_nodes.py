@@ -213,7 +213,10 @@ class AdvisorProcess:
                                                  "qa_list": []}}
         else:
             recorder.update({"classify_continue": True})
-            recorder.update({"classify": assis_config["details"]["classify"]})
+            elements = list()
+            for key, value in assis_config["details"]["details"].items():
+                elements.append(f"{key}：{value}")
+            recorder.update({"classify": elements})
             if not recorder.get("hit_intent", None):
                 recorder.update({"hit_intent": []})
             if not recorder.get("collect_pace", None):
@@ -289,7 +292,7 @@ class AdvisorProcess:
         recorder = state["flow_guide"]
         system = get_template(ASSISTANT_PERSONALITY).render(industry=config["industry"],
                                                             broadcast_topic=config["broadcast_topic"],
-                                                            elements="、".join(recorder["classify"])
+                                                            elements=None if not recorder.get("classify") else "、".join(recorder["classify"])
                                                             )
 
         answer_prompt = get_template(ANSWER_WITH_FORMER_QUESTION).render(context=state["former_question"],
@@ -334,7 +337,7 @@ class AdvisorProcess:
         recorder = state["flow_guide"]
         system_prompt = get_template(ASSISTANT_PERSONALITY).render(industry=recorder["industry"],
                                                                    broadcast_topic=recorder["broadcast_topic"],
-                                                                   elements="、".join(recorder["classify"])
+                                                                   elements=None if not recorder.get("classify") else "、".join(recorder["classify"])
                                                                    )
 
         if recorder["collect_pace"][recorder["now_intent"]]["flag"] == 0:
@@ -446,7 +449,7 @@ class AdvisorProcess:
 
         system_prompt = get_template(ASSISTANT_PERSONALITY).render(industry=recorder["industry"],
                                                                    broadcast_topic=recorder["broadcast_topic"],
-                                                                   elements="、".join(recorder["classify"])
+                                                                   elements=None if not recorder.get("classify") else "、".join(recorder["classify"])
                                                                    )
 
         # TODO: 当初级意图没有命中我们规定的意图时，需求没有收集客户信息。
@@ -534,7 +537,7 @@ class AdvisorProcess:
         config = state["assistant_config"]["assistant_config"]
         system_prompt = get_template(ASSISTANT_PERSONALITY).render(industry=recorder["industry"],
                                                                    broadcast_topic=recorder["broadcast_topic"],
-                                                                   elements="、".join(recorder["classify"])
+                                                                   elements=None if not recorder.get("classify") else "、".join(recorder["classify"])
                                                                    )
         collect_intent = recorder["hit_intent"][-1]
         details = config["details"]["details"][collect_intent]
@@ -590,7 +593,7 @@ class AdvisorProcess:
         config = state["assistant_config"]["assistant_config"]
         system_prompt = get_template(ASSISTANT_PERSONALITY).render(industry=recorder["industry"],
                                                                    broadcast_topic=recorder["broadcast_topic"],
-                                                                   elements="、".join(recorder["classify"])
+                                                                   elements=None if not recorder.get("classify") else "、".join(recorder["classify"])
                                                                    )
         collect_prompt, answer_prompt, collect_intent, next_intent, werther_answer = await cls.generate_collect_and_answer_prompt(recorder, config, query, state)
         prompt = answer_prompt + "\n\n" + collect_prompt
@@ -646,7 +649,7 @@ class AdvisorProcess:
         config = state["assistant_config"]["assistant_config"]
         system_prompt = get_template(ASSISTANT_PERSONALITY).render(industry=recorder["industry"],
                                                                    broadcast_topic=recorder["broadcast_topic"],
-                                                                   elements="、".join(recorder["classify"])
+                                                                   elements=None if not recorder.get("classify") else "、".join(recorder["classify"])
                                                                    )
         collect_prompt, _, collect_intent, next_intent, werther_answer = await cls.generate_collect_and_answer_prompt(
             recorder, config,
@@ -682,7 +685,7 @@ class AdvisorProcess:
         config = state["assistant_config"]["assistant_config"]
         system_prompt = get_template(ASSISTANT_PERSONALITY).render(industry=recorder["industry"],
                                                                    broadcast_topic=recorder["broadcast_topic"],
-                                                                   elements="、".join(recorder["classify"])
+                                                                   elements=None if not recorder.get("classify") else "、".join(recorder["classify"])
                                                                    )
 
         collect_prompt, answer_prompt, collect_intent, next_intent, werther_answer = await cls.generate_collect_and_answer_prompt(

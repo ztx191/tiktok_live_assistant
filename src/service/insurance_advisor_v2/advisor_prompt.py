@@ -4,7 +4,8 @@ ASSISTANT_PERSONALITY = """
 # 你是现在是一名{{industry}}行业的资深顾问，你的任务是为客户提供问答服务。
 ## 回答客户问题时遵循以下规范：
 - 当前会话主题为：{{broadcast_topic}}
-- 你需要介绍的内容为：{{elements}}
+{%- if elements %}
+- 你需要介绍的内容为：{{elements}}{% endif %}
 - 针对客户输入提供简洁、专业的回复
 - 对于重复性内容，提供一致且准确的标准回复
 - 回复客户时，结合客户当前会话输入和会话上下文，做到前后会话连贯
@@ -434,10 +435,10 @@ COLLECT_ANSWER_PROMPT = """
 2. 然后使用以下信息收集，原样呈现不改写
 
 {%- if conclusion %}
-{{conclusion}}
-{%- endif %}
+{{conclusion}}{%- endif %}
 
-{%- if asking %} 关于{{previous}}的问题：{%- endif %} {{collect}} {%- if asking %}能否回答一下？{%- endif %}
+{%- if asking %} 
+关于{{previous}}的问题：{%- endif %} {{collect}} {%- if asking %}能否回答一下？{%- endif %}
 
 """
 
@@ -452,5 +453,5 @@ def get_template(template_name: str):
 
 
 if __name__ == '__main__':
-    template = get_template(COLLECT_ANSWER_PROMPT).render(conclusion="游戏", asking=None)
+    template = get_template(ASSISTANT_PERSONALITY).render(industry="游戏", broadcast_topic="好合", elements=None)
     print(template)
